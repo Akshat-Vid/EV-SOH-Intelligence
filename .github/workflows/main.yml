@@ -1,0 +1,131 @@
+name: EV Battery Data Updater
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-battery-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install supabase
+
+      - name: Generate and save battery reading
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          import random
+          from supabase import create_client
+
+          url = os.environ["SUPABASE_URL"]
+          key = os.environ["SUPABASE_KEY"]
+
+          db = create_client(url, key)
+
+          result = (
+              db.table("battery_data")
+              .select("id,battery_id,cycle,raw_data")
+              .order("id", desc=True)
+              .limit(1)
+              .execute()
+          )
+
+          if not result.data:
+              battery_id = "1"
+              cycle = 1
+              previous = {
+                  "Voltage_V": 4.15,
+                  "Current_A": 5.0,
+                  "Temperature_C": 28.0,
+                  "Capacity_Ah": 2.90,
+                  "Internal_Resistance_Ohm": 0.048,
+                  "Charge_Time_min": 88.0,
+                  "SOH": 100.0
+              }
+          else:
+              latest = result.data[0]
+              battery_id = str(latest["battery_id"])
+              cycle = int(latest["cycle"] or 0) + 1
+              previous = latest.get("raw_data") or {}
+
+          current = round(random.uniform(2.0, 12.0), 4)
+
+          temperature = round(
+              max(
+                  20.0,
+                  min(
+                      55.0,
+                      float(previous.get("Temperature_C", 28.0))
+                      + random.uniform(-0.8, 1.0)
+                  )
+              ),
+              2
+          )
+
+          voltage = round(
+              max(
+                  3.3,
+                  min(4.2, 4.18 - current * 0.018
+                      + random.uniform(-0.025, 0.025))
+              ),
+              4
+          )
+
+          soh = round(
+              max(
+                  70.0,
+                  float(previous.get("SOH", 100.0))
+                  - random.uniform(0.001, 0.005)
+              ),
+              2
+          )
+
+          data = {
+              "Battery_ID": int(battery_id),
+              "Cycle": cycle,
+              "Voltage_V": voltage,
+              "Current_A": current,
+              "Temperature_C": temperature,
+              "Capacity_Ah": round(2.90 * soh / 100, 4),
+              "Internal_Resistance_Ohm": round(
+                  0.048 + (100 - soh) * 0.0008, 5
+              ),
+              "Charge_Time_min": round(
+                  88 + (100 - soh) * 0.8, 2
+              ),
+              "SOH": soh,
+              "Cooling_ON": False,
+              "Load_Reduced": False
+          }
+
+          record = {
+              "battery_id": battery_id,
+              "cycle": cycle,
+              "raw_data": data
+          }
+
+          db.table("battery_data").insert(record).execute()
+
+          print("Battery reading saved successfully.")
+          print("Battery ID:", battery_id)
+          print("Cycle:", cycle)
+          print("Temperature:", temperature)
+          print("SOH:", soh)
+          PY
