@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 import json
 import os
 import pickle
@@ -827,9 +828,69 @@ if page == "Live Dashboard":
 
         if predicted is not None:
 
-            st.metric(
-                "AI Predicted SOH",
-                f"{predicted:.2f}%"
+           if prediction is not None:
+
+    # Choose meter colour based on predicted battery health
+    if prediction >= 85:
+        meter_color = "#16A34A"
+    elif prediction >= 75:
+        meter_color = "#F59E0B"
+    else:
+        meter_color = "#DC2626"
+
+    # Create semicircular AI prediction meter
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=prediction,
+            number={
+                "suffix": "%",
+                "font": {"size": 36}
+            },
+            title={
+                "text": "AI-PREDICTED BATTERY HEALTH",
+                "font": {"size": 16}
+            },
+            gauge={
+                "shape": "angular",
+                "axis": {
+                    "range": [0, 100],
+                    "ticksuffix": "%"
+                },
+                "bar": {
+                    "color": meter_color,
+                    "thickness": 0.25
+                },
+                "bgcolor": "rgba(128,128,128,0.10)",
+                "borderwidth": 0,
+                "steps": [
+                    {
+                        "range": [0, 75],
+                        "color": "rgba(220,38,38,0.15)"
+                    },
+                    {
+                        "range": [75, 85],
+                        "color": "rgba(245,158,11,0.18)"
+                    },
+                    {
+                        "range": [85, 100],
+                        "color": "rgba(22,163,74,0.15)"
+                    }
+                ]
+            }
+        )
+    )
+
+    fig.update_layout(
+        height=300,
+        margin=dict(l=25, r=25, t=65, b=10)
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"displayModeBar": False}
+    )
             )
 
         else:
